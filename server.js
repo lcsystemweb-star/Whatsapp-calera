@@ -80,49 +80,66 @@ REGLAS IMPORTANTES:
 
 // ─── GENERAR RESPUESTA CON GEMINI ────────────────────────────
 async function generarRespuesta(telefono, mensajeUsuario) {
-  agregarMensaje(telefono, "user", mensajeUsuario);
-  const historial = getHistorial(telefono);
+  try {
+    agregarMensaje(telefono, "user", mensajeUsuario);
+    const historial = getHistorial(telefono);
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
 
-  const body = {
-    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: historial,
-    generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-  };
+    const body = {
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: historial,
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+    };
 
-  const response = await axios.post(url, body);
-  const texto = response.data.candidates[0].content.parts[0].text;
+    const response = await axios.post(url, body, { timeout: 8000 });
 
-  agregarMensaje(telefono, "model", texto);
+    const texto =
+      response.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Lo siento, tuve un problema generando la respuesta 😔";
 
-  const match = texto.match(/RESERVA_CONFIRMADA:([A-Z0-9]{6})/);
-  if (match) {
-    return texto.replace(`RESERVA_CONFIRMADA:${match[1]}`, `*Código de reserva: ${match[1]}*`);
+    agregarMensaje(telefono, "model", texto);
+
+    const match = texto.match(/RESERVA_CONFIRMADA:([A-Z0-9]{6})/);
+    if (match) {
+      return texto.replace(
+        `RESERVA_CONFIRMADA:${match[1]}`,
+        `*Código de reserva: ${match[1]}*`
+      );
+    }
+
+    return texto;
+  } catch (error) {
+    console.error("❌ Error Gemini:", error.response?.data || error.message);
+    return "Lo siento, estoy teniendo problemas técnicos. Intenta nuevamente en unos minutos 🙏";
   }
-
-  return texto;
 }
 
 // ─── ENVIAR MENSAJE POR WHATSAPP ─────────────────────────────
 async function enviarMensaje(telefono, texto) {
-  const url = `https://graph.facebook.com/v22.0/${CONFIG.WA_PHONE_ID}/messages`;
+  try {
+    const url = `https://graph.facebook.com/v22.0/${CONFIG.WA_PHONE_ID}/messages`;
 
-  await axios.post(
-    url,
-    {
-      messaging_product: "whatsapp",
-      to: telefono,
-      type: "text",
-      text: { body: texto },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${CONFIG.WA_TOKEN}`,
-        "Content-Type": "application/json",
+    const response = await axios.post(
+      url,
+      {
+        messaging_product: "whatsapp",
+        to: telefono,
+        type: "text",
+        text: { body: texto },
       },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${CONFIG.WA_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("✅ Mensaje enviado:", response.data);
+  } catch (error) {
+    console.error("❌ Error enviando WhatsApp:", error.response?.data || error.message);
+  }
 }
 
 // ─── WEBHOOK VERIFICACIÓN (Meta requiere esto) ────────────────
