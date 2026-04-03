@@ -1,35 +1,26 @@
 /**
  * ============================================================
  *  HOSTAL LA CABAÑA VERDE — Agente WhatsApp con IA
- *  Backend Node.js + WhatsApp Business API (Meta) + Claude AI
+ *  Backend Node.js + WhatsApp Business API (Meta) + Gemini AI
  * ============================================================
  */
 
 const express = require("express");
 const axios = require("axios");
-const Anthropic = require("@anthropic-ai/sdk");
 
 const app = express();
 app.use(express.json());
 
 // ─── CONFIGURACIÓN ───────────────────────────────────────────
 const CONFIG = {
-  // WhatsApp Business API
-  WA_TOKEN: process.env.WA_TOKEN,           // Token de acceso de Meta
-  WA_PHONE_ID: process.env.WA_PHONE_ID,     // ID del número de teléfono
-  WA_VERIFY_TOKEN: process.env.WA_VERIFY_TOKEN, // Token de verificación del webhook
-
-  // Anthropic
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-
+  WA_TOKEN: process.env.WA_TOKEN,
+  WA_PHONE_ID: process.env.WA_PHONE_ID,
+  WA_VERIFY_TOKEN: process.env.WA_VERIFY_TOKEN,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   PORT: process.env.PORT || 3000,
 };
 
-// ─── CLIENTE ANTHROPIC ───────────────────────────────────────
-const anthropic = new Anthropic({ apiKey: CONFIG.ANTHROPIC_API_KEY });
-
 // ─── HISTORIAL POR USUARIO ───────────────────────────────────
-// Guarda conversaciones en memoria (en producción usa Redis o DB)
 const conversaciones = new Map();
 
 function getHistorial(telefono) {
@@ -41,8 +32,8 @@ function getHistorial(telefono) {
 
 function agregarMensaje(telefono, role, content) {
   const historial = getHistorial(telefono);
-  historial.push({ role, content });
-  // Limitar a los últimos 30 mensajes para no exceder tokens
+  // Gemini usa "user" y "model" (no "assistant")
+  historial.push({ role, parts: [{ text: content }] });
   if (historial.length > 30) historial.splice(0, historial.length - 30);
 }
 
@@ -87,27 +78,27 @@ REGLAS IMPORTANTES:
 - Al confirmar reserva incluye exactamente el texto: RESERVA_CONFIRMADA:[código de 6 caracteres]
 - Si el usuario escribe solo números (posible comprobante de pago), agradece y di que se verificará en 24 horas`;
 
-// ─── GENERAR RESPUESTA CON CLAUDE ────────────────────────────
+// ─── GENERAR RESPUESTA CON GEMINI ────────────────────────────
 async function generarRespuesta(telefono, mensajeUsuario) {
   agregarMensaje(telefono, "user", mensajeUsuario);
   const historial = getHistorial(telefono);
 
-  const respuesta = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: historial,
-  });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
 
-  const texto = respuesta.content.map((b) => b.text || "").join("");
-  agregarMensaje(telefono, "assistant", texto);
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: historial,
+    generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+  };
 
-  // Detectar si hay confirmación de reserva
+  const response = await axios.post(url, body);
+  const texto = response.data.candidates[0].content.parts[0].text;
+
+  agregarMensaje(telefono, "model", texto);
+
   const match = texto.match(/RESERVA_CONFIRMADA:([A-Z0-9]{6})/);
   if (match) {
-    const codigo = match[1];
-    // Limpiar el marcador del texto visible
-    return texto.replace(`RESERVA_CONFIRMADA:${codigo}`, `*Código de reserva: ${codigo}*`);
+    return texto.replace(`RESERVA_CONFIRMADA:${match[1]}`, `*Código de reserva: ${match[1]}*`);
   }
 
   return texto;
