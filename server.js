@@ -54,7 +54,7 @@ FLUJO DE RESERVA:
 
 
 
-INSTRUCCIONES DE PAGO (solo mostrar al confirmar reserva):
+INSTRUCCIONES DE PAGO 
 
  el pago de Nequi o Daviplata se deben hacer a este número y enviar copia a dicho numero
 - Nequi: 3107957939
