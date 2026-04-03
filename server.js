@@ -79,26 +79,42 @@ REGLAS IMPORTANTES:
 - Si el usuario escribe solo números (posible comprobante de pago), agradece y di que se verificará en 24 horas`;
 
 // ─── GENERAR RESPUESTA CON GEMINI ────────────────────────────
+const OpenAI = require("openai");
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 async function generarRespuesta(telefono, mensajeUsuario) {
   try {
-    agregarMensaje(telefono, "user", mensajeUsuario);
     const historial = getHistorial(telefono);
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
-    const body = {
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: historial,
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-    };
+    // Adaptamos historial al formato OpenAI
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...historial.map((m) => ({
+        role: m.role === "model" ? "assistant" : "user",
+        content: m.parts[0].text,
+      })),
+      { role: "user", content: mensajeUsuario },
+    ];
 
-    const response = await axios.post(url, body, { timeout: 8000 });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // 🔥 recomendado costo/calidad
+      messages: messages,
+      temperature: 0.7,
+      max_tokens: 500,
+    });
 
     const texto =
-      response.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Lo siento, tuve un problema generando la respuesta 😔";
+      completion.choices?.[0]?.message?.content ||
+      "Lo siento, hubo un problema generando la respuesta 😔";
 
+    // Guardar historial
+    agregarMensaje(telefono, "user", mensajeUsuario);
     agregarMensaje(telefono, "model", texto);
 
+    // Detectar confirmación de reserva
     const match = texto.match(/RESERVA_CONFIRMADA:([A-Z0-9]{6})/);
     if (match) {
       return texto.replace(
@@ -109,11 +125,10 @@ async function generarRespuesta(telefono, mensajeUsuario) {
 
     return texto;
   } catch (error) {
-    console.error("❌ Error Gemini:", error.response?.data || error.message);
-    return "Lo siento, estoy teniendo problemas técnicos. Intenta nuevamente en unos minutos 🙏";
+    console.error("❌ Error OpenAI:", error.response?.data || error.message);
+    return "Estoy teniendo problemas técnicos 😔 Intenta nuevamente en unos minutos.";
   }
 }
-
 // ─── ENVIAR MENSAJE POR WHATSAPP ─────────────────────────────
 async function enviarMensaje(telefono, texto) {
   try {
