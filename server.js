@@ -84,8 +84,7 @@ async function generarRespuesta(telefono, mensajeUsuario) {
     agregarMensaje(telefono, "user", mensajeUsuario);
     const historial = getHistorial(telefono);
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
-
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
     const body = {
       system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: historial,
