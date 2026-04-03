@@ -38,8 +38,7 @@ function agregarMensaje(telefono, role, content) {
 }
 
 // ─── SISTEMA DEL AGENTE ──────────────────────────────────────
-const SYSTEM_PROMPT = "Aquí está el prompt completo para tu agente:
-
+const SYSTEM_PROMPT = '
 ---
 
 **PROMPT - Agente WhatsApp La Calera Amazónica**
@@ -203,8 +202,7 @@ Baños y duchas externas compartidas, cargador solar, parqueadero, eco-parque, a
 5. Al cerrar una reserva, indica que se comuniquen al **310 288 9948** o por **@lacaleraamazonica**
 6. Si preguntan por algo que no está en el menú o la info, responde amablemente que no tienes ese dato y sugiere llamar directamente
 7. Nunca inventes precios ni información que no esté aquí
-8. Usa emojis con moderación: 🌿🐒🐟🔥🍃🌊 para dar calidez sin saturar"
-
+8. Usa emojis con moderación: 🌿🐒🐟🔥🍃🌊 para dar calidez sin saturar'
 // ─── GENERAR RESPUESTA CON GEMINI ────────────────────────────
 const OpenAI = require("openai");
 
