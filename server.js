@@ -106,7 +106,7 @@ async function generarRespuesta(telefono, mensajeUsuario) {
 
 // ─── ENVIAR MENSAJE POR WHATSAPP ─────────────────────────────
 async function enviarMensaje(telefono, texto) {
-  const url = `https://graph.facebook.com/v19.0/${CONFIG.WA_PHONE_ID}/messages`;
+  const url = `https://graph.facebook.com/v22.0/${CONFIG.WA_PHONE_ID}/messages`;
 
   await axios.post(
     url,
