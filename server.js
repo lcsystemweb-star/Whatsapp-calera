@@ -50,6 +50,10 @@ REGLA MÁS IMPORTANTE:
 - Llegada máxima: 6:00 pm (si no llega, se pierde el depósito)
 - Reserva: depósito del 100% anticipado
 - Alimentación adicional: debe solicitarse con anticipación
+- Contamos con tres salones de eventos y con capacidad inmobiliaria para atender todo tipo de evento.
+- también se puede reservar mesas en el restaurante.
+- decoración apropiadas para cumpleaños
+- Seguro médico 
 
 === MENÚ ===
 
