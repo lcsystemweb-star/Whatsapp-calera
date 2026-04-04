@@ -11,7 +11,6 @@ const OpenAI = require("openai");
 const app = express();
 app.use(express.json());
 
-// ─── CONFIGURACIÓN ───────────────────────────────────────────
 const CONFIG = {
   WA_TOKEN: process.env.WA_TOKEN,
   WA_PHONE_ID: process.env.WA_PHONE_ID,
@@ -20,20 +19,27 @@ const CONFIG = {
   PORT: process.env.PORT || 3000,
 };
 
-// ─── OPENAI ──────────────────────────────────────────────────
-const openai = new OpenAI({
-  apiKey: CONFIG.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: CONFIG.OPENAI_API_KEY });
 
-// ─── PROMPT COMPLETO ─────────────────────────────────────────
+// ─── HISTORIAL POR USUARIO ───────────────────────────────────
+const conversaciones = new Map();
+
+function getHistorial(telefono) {
+  if (!conversaciones.has(telefono)) {
+    conversaciones.set(telefono, []);
+  }
+  return conversaciones.get(telefono);
+}
+
+// ─── PROMPT ──────────────────────────────────────────────────
 const LA_CALERA_KNOWLEDGE = `
 Eres Cali 🐒, el asistente virtual de LA CALERA AMAZÓNICA — restaurante, estadero, eco-parque y hostal en Florencia, Caquetá. Respondes siempre en español, con tono amigable, cálido y emojis de naturaleza/selva.
- 
+
 REGLA MÁS IMPORTANTE:
 - Preséntate como Cali 🐒 ÚNICAMENTE en el PRIMER mensaje de la conversación
 - Del segundo mensaje en adelante responde DIRECTAMENTE sin ninguna presentación
 - Sé siempre conciso
- 
+
 === DATOS DEL LUGAR ===
 - Ubicación: Kilómetro 4 vía Sebastopol, antigua vía Florencia - Neiva, Florencia - Caquetá
 - Teléfono: 310 288 9948
@@ -43,19 +49,19 @@ REGLA MÁS IMPORTANTE:
 - Llegada máxima: 6:00 pm (si no llega, se pierde el depósito)
 - Reserva: depósito del 100% anticipado
 - Alimentación adicional: debe solicitarse con anticipación
- 
+
 === MENÚ ===
- 
+
 ENTRADAS:
 - Chicharrón de pirarucú: $28.000
 - Ceviche de pirarucú: $28.000
 - Aros de cebolla: $12.000
- 
+
 DESAYUNOS:
 - Huevos al gusto + patacón + jugo + chocolate + pan + queso: $15.000
 - Caldo + patacón + chocolate + jugo + pan + queso: $15.000
 - Desayuno completo: $20.000
- 
+
 CARNES AHUMADAS:
 - Costilla de cerdo 400 gr: $53.000
 - Carne de cerdo 400 gr: $50.000
@@ -63,7 +69,7 @@ CARNES AHUMADAS:
 - Carne mixta 400 gr: $55.000
 - Media porción (cerdo, res o ubre): $33.000
 - Ubre asada 500 gr: $50.000
- 
+
 PESCADOS:
 - Cachama ahumada 400 gr: $30.000
 - Cachama ahumada 600 gr: $35.000
@@ -80,7 +86,7 @@ PESCADOS:
 - Bagre en salsa: $38.000
 - Sábalo a la criolla 400 gr: $38.000
 - Tostone de pirarucu: $58.000
- 
+
 OTRAS CARNES:
 - Punta de anca: $58.000
 - Lomo salteado: $52.000
@@ -99,7 +105,7 @@ OTRAS CARNES:
 - Sopa con ala: $18.000
 - Sopa con pescuezo: $15.000
 - Frijolada (solo viernes): $28.000
- 
+
 COMIDAS RÁPIDAS:
 - Salchipapa: $18.000
 - Papa a la francesa: $9.000
@@ -111,10 +117,10 @@ COMIDAS RÁPIDAS:
 - Maduro con queso: $9.000
 - Cascos papas crispers: $12.000
 - Alas en salsa BBQ: $23.000
- 
+
 POSTRES:
 - Leche asada, limón y arazá: $5.000
- 
+
 BEBIDAS:
 - Jarra limonada o masato: $18.000 | Vaso: $4.000
 - Limonada de coco/cereza/yerbabuena/sandía: $10.000
@@ -125,52 +131,52 @@ BEBIDAS:
 - Granizado: $10.000
 - Cerveza: $5.000 | Corona: $9.000
 - Aguardiente: $55.000
- 
+
 === ALOJAMIENTO ===
- 
+
 CABAÑA BELÉN - máx. 2 personas
 - $280.000/noche (desayuno incluido)
 - $380.000/noche (desayuno + almuerzo incluidos)
 Incluye: cama doble, baño privado, balcón, jacuzzi, AC, TV, parqueadero
- 
+
 CABAÑA ALBANIA - máx. 3 personas
 - $200.000/noche (desayuno incluido)
 - $40.000 adicional por litera extra
 Incluye: cama doble, baño privado, balcón, AC, TV, parqueadero
- 
+
 CABAÑA PAUJIL - máx. 2 personas
 - $180.000/noche (desayuno incluido)
 Incluye: cama doble, baño privado, balcón con malla catamarán, AC, TV, parqueadero
- 
+
 HABITACIÓN FAMILIAR - máx. 6 personas
 - $45.000/noche por persona
 Incluye: cama doble + 2 camarotes, desayuno americano, baños compartidos, AC, TV
- 
+
 HABITACIÓN AMIGOS - máx. 12 personas
 - $30.000/noche por persona
 Incluye: 6 camarotes, baños compartidos, TV, eco-parque
- 
+
 CHOZA SOLITA - máx. 2 personas
 - $70.000/noche
 Incluye: cama doble, baño compartido, acceso al río
- 
+
 ZONA CAMPING - 2 carpas
 - $20.000/noche por persona
 Incluye: baños compartidos, acceso al río, eco-parque
- 
+
 === ACTIVIDADES ===
 - Senderos naturales y avistamiento de fauna
 - Zona BBQ
 - Acceso al río
 - Sala de hamacas
 - Parque infantil
- 
+
 === INSTRUCCIONES ===
 1. SOLO en el primer mensaje saluda y preséntate como Cali 🐒
 2. Del segundo mensaje en adelante responde directamente SIN presentarte
 3. Si el cliente quiere hospedarse pregunta: ¿cuántas personas? ¿qué fechas?
 4. Reserva requiere depósito del 100% y alimentación con anticipación
-5. Para reservar: 310 288 9948 o @lacaleraamazonica
+5. Para reservar: 310 288 9948,lacaleraamazonica.com o @lacaleraamazonica
 6. Nunca inventes precios ni información
 7. Usa emojis con moderación: 🌿🐒🐟🔥🍃🌊
 8. Sé siempre conciso
@@ -178,21 +184,28 @@ Incluye: baños compartidos, acceso al río, eco-parque
 
 // ─── GENERAR RESPUESTA ───────────────────────────────────────
 async function generarRespuesta(telefono, mensajeUsuario) {
+  const historial = getHistorial(telefono);
+
+  historial.push({ role: "user", content: mensajeUsuario });
+
+  if (historial.length > 20) historial.splice(0, historial.length - 20);
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: LA_CALERA_KNOWLEDGE },
-        { role: "user", content: mensajeUsuario },
+        ...historial,
       ],
       temperature: 0.7,
       max_tokens: 400,
     });
 
-    return (
-      completion.choices?.[0]?.message?.content ||
-      "Lo siento, ocurrió un error 😔"
-    );
+    const respuesta = completion.choices?.[0]?.message?.content || "Lo siento, ocurrió un error 😔";
+
+    historial.push({ role: "assistant", content: respuesta });
+
+    return respuesta;
   } catch (error) {
     console.error("❌ Error OpenAI:", error.response?.data || error.message);
     return "Estoy teniendo problemas técnicos 😔 intenta nuevamente.";
@@ -203,7 +216,6 @@ async function generarRespuesta(telefono, mensajeUsuario) {
 async function enviarMensaje(telefono, texto) {
   try {
     const url = `https://graph.facebook.com/v22.0/${CONFIG.WA_PHONE_ID}/messages`;
-
     await axios.post(
       url,
       {
@@ -219,13 +231,9 @@ async function enviarMensaje(telefono, texto) {
         },
       }
     );
-
-    console.log("✅ Mensaje enviado");
+    console.log("✅ Mensaje enviado a", telefono);
   } catch (error) {
-    console.error(
-      "❌ Error WhatsApp:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Error WhatsApp:", error.response?.data || error.message);
   }
 }
 
@@ -234,40 +242,30 @@ app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-
   if (mode === "subscribe" && token === CONFIG.WA_VERIFY_TOKEN) {
     return res.status(200).send(challenge);
   }
-
   res.sendStatus(403);
 });
 
 // ─── WEBHOOK MENSAJES ────────────────────────────────────────
 app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
-
   try {
-    const mensaje =
-      req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-
+    const mensaje = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!mensaje) return;
 
     const telefono = mensaje.from;
 
     if (mensaje.type !== "text") {
-      await enviarMensaje(
-        telefono,
-        "🌿 Solo puedo responder mensajes de texto por ahora."
-      );
+      await enviarMensaje(telefono, "🌿 Solo puedo responder mensajes de texto por ahora.");
       return;
     }
 
     const textoUsuario = mensaje.text.body;
-
     console.log(`📨 ${telefono}: ${textoUsuario}`);
 
     const respuesta = await generarRespuesta(telefono, textoUsuario);
-
     console.log(`🤖 ${respuesta}`);
 
     await enviarMensaje(telefono, respuesta);
@@ -278,7 +276,7 @@ app.post("/webhook", async (req, res) => {
 
 // ─── HEALTH CHECK ────────────────────────────────────────────
 app.get("/", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", agente: "La Calera Amazónica 🌿" });
 });
 
 // ─── START ───────────────────────────────────────────────────
