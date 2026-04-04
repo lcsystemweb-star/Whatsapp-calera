@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  LA CALERA AMAZÓNICA — Agente WhatsApp con IA (OpenAI)
+ *  LA CALERA AMAZÓNICA — Agente WhatsApp + Messenger con IA
  * ============================================================
  */
 
@@ -15,6 +15,7 @@ const CONFIG = {
   WA_TOKEN: process.env.WA_TOKEN,
   WA_PHONE_ID: process.env.WA_PHONE_ID,
   WA_VERIFY_TOKEN: process.env.WA_VERIFY_TOKEN,
+  FB_PAGE_TOKEN: process.env.FB_PAGE_TOKEN,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   PORT: process.env.PORT || 3000,
 };
@@ -176,18 +177,16 @@ Incluye: baños compartidos, acceso al río, eco-parque
 2. Del segundo mensaje en adelante responde directamente SIN presentarte
 3. Si el cliente quiere hospedarse pregunta: ¿cuántas personas? ¿qué fechas?
 4. Reserva requiere depósito del 100% y alimentación con anticipación
-5. Para reservar: 310 288 9948,lacaleraamazonica.com o @lacaleraamazonica
+5. Para reservar: 310 288 9948 o @lacaleraamazonica
 6. Nunca inventes precios ni información
 7. Usa emojis con moderación: 🌿🐒🐟🔥🍃🌊
 8. Sé siempre conciso
 `;
 
 // ─── GENERAR RESPUESTA ───────────────────────────────────────
-async function generarRespuesta(telefono, mensajeUsuario) {
-  const historial = getHistorial(telefono);
-
+async function generarRespuesta(userId, mensajeUsuario) {
+  const historial = getHistorial(userId);
   historial.push({ role: "user", content: mensajeUsuario });
-
   if (historial.length > 20) historial.splice(0, historial.length - 20);
 
   try {
@@ -202,9 +201,7 @@ async function generarRespuesta(telefono, mensajeUsuario) {
     });
 
     const respuesta = completion.choices?.[0]?.message?.content || "Lo siento, ocurrió un error 😔";
-
     historial.push({ role: "assistant", content: respuesta });
-
     return respuesta;
   } catch (error) {
     console.error("❌ Error OpenAI:", error.response?.data || error.message);
@@ -213,7 +210,7 @@ async function generarRespuesta(telefono, mensajeUsuario) {
 }
 
 // ─── ENVIAR MENSAJE WHATSAPP ─────────────────────────────────
-async function enviarMensaje(telefono, texto) {
+async function enviarMensajeWhatsApp(telefono, texto) {
   try {
     const url = `https://graph.facebook.com/v22.0/${CONFIG.WA_PHONE_ID}/messages`;
     await axios.post(
@@ -231,44 +228,95 @@ async function enviarMensaje(telefono, texto) {
         },
       }
     );
-    console.log("✅ Mensaje enviado a", telefono);
+    console.log("✅ WhatsApp enviado a", telefono);
   } catch (error) {
     console.error("❌ Error WhatsApp:", error.response?.data || error.message);
   }
 }
 
-// ─── WEBHOOK VERIFICACIÓN ────────────────────────────────────
+// ─── ENVIAR MENSAJE MESSENGER ────────────────────────────────
+async function enviarMensajeMessenger(senderId, texto) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v22.0/me/messages`,
+      {
+        recipient: { id: senderId },
+        message: { text: texto },
+      },
+      {
+        params: { access_token: CONFIG.FB_PAGE_TOKEN },
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+    console.log("✅ Messenger enviado a", senderId);
+  } catch (error) {
+    console.error("❌ Error Messenger:", error.response?.data || error.message);
+  }
+}
+
+// ─── WEBHOOK VERIFICACIÓN (WhatsApp + Messenger usan el mismo) ──
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
   if (mode === "subscribe" && token === CONFIG.WA_VERIFY_TOKEN) {
+    console.log("✅ Webhook verificado");
     return res.status(200).send(challenge);
   }
   res.sendStatus(403);
 });
 
-// ─── WEBHOOK MENSAJES ────────────────────────────────────────
+// ─── WEBHOOK MENSAJES ENTRANTES ───────────────────────────────
 app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
+
   try {
-    const mensaje = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!mensaje) return;
+    const body = req.body;
+    if (!body.entry) return;
 
-    const telefono = mensaje.from;
+    for (const entry of body.entry) {
 
-    if (mensaje.type !== "text") {
-      await enviarMensaje(telefono, "🌿 Solo puedo responder mensajes de texto por ahora.");
-      return;
+      // ── MESSENGER ──────────────────────────────────────────
+      if (entry.messaging) {
+        const event = entry.messaging[0];
+        const senderId = event.sender?.id;
+
+        // Ignorar mensajes del propio bot
+        if (!senderId || event.message?.is_echo) return;
+
+        if (!event.message?.text) {
+          await enviarMensajeMessenger(senderId, "🌿 Solo puedo responder mensajes de texto por ahora.");
+          return;
+        }
+
+        const textoUsuario = event.message.text;
+        console.log(`📨 Messenger ${senderId}: ${textoUsuario}`);
+
+        const respuesta = await generarRespuesta(`fb_${senderId}`, textoUsuario);
+        console.log(`🤖 ${respuesta}`);
+        await enviarMensajeMessenger(senderId, respuesta);
+      }
+
+      // ── WHATSAPP ───────────────────────────────────────────
+      if (entry.changes) {
+        const mensaje = entry.changes[0]?.value?.messages?.[0];
+        if (!mensaje) continue;
+
+        const telefono = mensaje.from;
+
+        if (mensaje.type !== "text") {
+          await enviarMensajeWhatsApp(telefono, "🌿 Solo puedo responder mensajes de texto por ahora.");
+          continue;
+        }
+
+        const textoUsuario = mensaje.text.body;
+        console.log(`📨 WhatsApp ${telefono}: ${textoUsuario}`);
+
+        const respuesta = await generarRespuesta(`wa_${telefono}`, textoUsuario);
+        console.log(`🤖 ${respuesta}`);
+        await enviarMensajeWhatsApp(telefono, respuesta);
+      }
     }
-
-    const textoUsuario = mensaje.text.body;
-    console.log(`📨 ${telefono}: ${textoUsuario}`);
-
-    const respuesta = await generarRespuesta(telefono, textoUsuario);
-    console.log(`🤖 ${respuesta}`);
-
-    await enviarMensaje(telefono, respuesta);
   } catch (error) {
     console.error("❌ Error general:", error.message);
   }
@@ -276,10 +324,11 @@ app.post("/webhook", async (req, res) => {
 
 // ─── HEALTH CHECK ────────────────────────────────────────────
 app.get("/", (req, res) => {
-  res.json({ status: "ok", agente: "La Calera Amazónica 🌿" });
+  res.json({ status: "ok", agente: "La Calera Amazónica 🌿", canales: ["WhatsApp", "Messenger"] });
 });
 
 // ─── START ───────────────────────────────────────────────────
 app.listen(CONFIG.PORT, () => {
   console.log(`🚀 Servidor en puerto ${CONFIG.PORT}`);
+  console.log(`📱 WhatsApp + Messenger activos`);
 });
