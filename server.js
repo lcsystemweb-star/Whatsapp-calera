@@ -185,7 +185,7 @@ Incluye: baños compartidos, acceso al río, eco-parque
 6. Nunca inventes precios ni información
 7. Usa emojis con moderación: 🌿🐒🐟🔥🍃🌊
 8. Sé siempre conciso
-9. No responder a este numero telefonico 573217635248, 3217635248, +573217635248
+9. No responder ningun mensaje a estos numeros telefonicos 573217635248, 3217635248, +573217635248
 `;
 
 // ─── GENERAR RESPUESTA ───────────────────────────────────────
